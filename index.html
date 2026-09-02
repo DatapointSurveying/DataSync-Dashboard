@@ -1,0 +1,1495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Project Tracker</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.min.js"></script>
+<style>
+  :root {
+    /* unified dark theme (matches project data submission page) */
+    --bg:          #0d1526;
+    --page:        #0d1526;   /* page background */
+    --teal:        #14203a;   /* project card = panel */
+    --teal-dark:   #1c2c4d;   /* hover / deeper panel */
+    --teal-line:   #2a3d63;
+    --band:        #1c2c4d;   /* stage band = panel2 */
+    --band-line:   #2a3d63;
+    --panel:       #14203a;   /* stage body panel */
+    --ink:         #e6ecf7;   /* light text */
+    --muted:       #8397bd;
+    --ghost:       #8397bd;
+    --shadow:      rgba(0,0,0,.4);
+    /* accent = Datapoint brand blue (from logo) */
+    --red:         #207dd1;   /* var name kept for compatibility; value is brand blue */
+    --red-dark:    #1a68b0;
+    --brand-blue:  #207dd1;
+    --brand-grey:  #a0a0a0;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap');
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    padding: 28px 20px 80px;
+    line-height: 1.45;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; }
+
+  header.top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    margin: 0 0 22px;
+    padding: 0 6px;
+  }
+  header.top h1 {
+    font-size: 15px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--red);
+    margin: 0;
+  }
+  header.top .count { font-size: 13px; color: var(--muted); letter-spacing: .04em; }
+
+  /* ---- Project card ---- */
+  .project {
+    background: var(--teal);
+    border: 1px solid var(--teal-line);
+    border-radius: 22px;
+    padding: 20px 24px 8px;
+    margin-bottom: 20px;
+    box-shadow: 0 6px 18px var(--shadow);
+  }
+  .project.collapsed { padding-bottom: 20px; }
+
+  .project-head {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .chevron {
+    color: #cfe3f2;
+    font-size: 15px;
+    width: 16px; text-align: center;
+    transition: transform .18s ease;
+    flex: none;
+  }
+  .project.collapsed .chevron { transform: rotate(-90deg); }
+  .project-title {
+    color: #fff;
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: .01em;
+    margin: 0;
+    flex: 1 1 auto;
+    background: none; border: none; outline: none;
+    padding: 2px 4px;
+    border-radius: 6px;
+  }
+  .project-title:focus { background: rgba(255,255,255,.12); }
+  .proj-del {
+    flex: none;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,.35);
+    color: #d8e8f4;
+    border-radius: 8px;
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity .15s, background .15s;
+  }
+  .project:hover .proj-del { opacity: 1; }
+  .proj-del:hover { background: rgba(255,255,255,.14); color: #fff; }
+
+  .stages { margin-top: 16px; }
+  .project.collapsed .stages { display: none; }
+
+  /* ---- Stage ---- */
+  .stage { margin-bottom: 12px; }
+  .stage-band {
+    background: var(--band);
+    border: 1px solid var(--band-line);
+    border-radius: 8px;
+    padding: 9px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .stage.open .stage-band { border-radius: 8px 8px 0 0; }
+  .stage-caret { color: var(--ink); font-size: 12px; width: 12px; transition: transform .18s; flex: none; }
+  .stage.open .stage-caret { transform: rotate(90deg); }
+  .stage-name {
+    flex: 1 1 auto;
+    text-align: center;
+    text-align-last: center;
+    color: var(--ink);
+    font-size: 17px;
+    font-weight: 600;
+    font-family: inherit;
+    background: transparent; border: none; outline: none;
+    padding: 1px 4px; border-radius: 5px;
+    cursor: pointer;
+    -webkit-appearance: none; appearance: none;
+  }
+  .stage-name:focus { background: rgba(255,255,255,.08); }
+  .stage-name option { color: var(--ink); background: var(--panel2, #1c2c4d); }
+  .stage-del {
+    flex: none;
+    background: transparent; border: none;
+    color: var(--ink);
+    opacity: .45;
+    cursor: pointer;
+    font-size: 15px;
+    padding: 0 4px;
+    border-radius: 5px;
+  }
+  .stage-del:hover { opacity: 1; background: rgba(255,255,255,.12); }
+
+  .stage-body {
+    background: var(--panel);
+    border: 1px solid var(--band-line);
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    padding: 16px 16px 18px;
+    display: none;
+  }
+  .stage.open .stage-body { display: block; }
+
+  /* files */
+  .file-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+  }
+  .dl {
+    background: var(--red);
+    color: #fff;
+    border: 1px solid var(--red-dark);
+    border-radius: 7px;
+    padding: 7px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .dl:hover { background: var(--red-dark); }
+  .dl:disabled { background: #2a3d63; color: #6b7da0; border-color: #2a3d63; cursor: not-allowed; opacity: .6; }
+  .dl:disabled:hover { background: #2a3d63; }
+  .dl svg { width: 15px; height: 15px; }
+  .ul {
+    background: var(--teal);
+    color: #fff;
+    border: 1px solid var(--teal-line);
+    border-radius: 7px;
+    padding: 7px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .ul:hover { background: var(--teal-dark); }
+  .ul svg { width: 15px; height: 15px; }
+  .sub-data {
+    background: var(--panel2, #1c2c4d);
+    color: var(--ink);
+    border: 1px solid var(--teal-line);
+    border-radius: 7px;
+    padding: 7px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .sub-data:hover { background: #26365c; border-color: var(--red); }
+  .sub-data svg { width: 15px; height: 15px; }
+  .file-name { font-size: 13px; color: var(--muted); }
+  .file-x {
+    background: none; border: none; color: var(--ghost);
+    cursor: pointer; font-size: 14px; padding: 2px 6px; border-radius: 4px;
+  }
+  .file-x:hover { color: var(--red); background: rgba(226,59,78,.14); }
+
+  .add-file {
+    display: inline-flex; align-items: center; gap: 6px;
+    margin: 8px 0 14px;
+    font-size: 13px; color: var(--red);
+    background: none; border: 1px dashed var(--red);
+    border-radius: 7px; padding: 6px 12px; cursor: pointer;
+  }
+  .add-file:hover { background: rgba(226,59,78,.12); }
+
+  /* notes */
+  .notes-label {
+    font-size: 12px; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--muted); font-weight: 600; margin: 6px 0 6px;
+  }
+  textarea.notes {
+    width: 100%;
+    min-height: 70px;
+    resize: vertical;
+    border: 1px solid var(--teal-line);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font: inherit;
+    font-size: 14px;
+    color: var(--ink);
+    background: var(--panel2, #1c2c4d);
+    outline: none;
+  }
+  textarea.notes:focus { border-color: var(--red); background: #223354; }
+  textarea.notes::placeholder { color: var(--muted); }
+
+  /* add-stage + add-project ghost bars */
+  .add-stage {
+    width: 100%;
+    background: rgba(255,255,255,.05);
+    border: 1px dashed var(--teal-line);
+    border-radius: 8px;
+    color: var(--muted);
+    padding: 9px 14px;
+    text-align: center;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 2px;
+  }
+  .add-stage:hover { background: rgba(255,255,255,.1); color: var(--ink); }
+
+  .add-project {
+    width: 100%;
+    background: var(--teal);
+    border: 1px solid var(--teal-line);
+    border-radius: 22px;
+    color: var(--muted);
+    padding: 26px 24px;
+    text-align: left;
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: .04em;
+    cursor: pointer;
+    box-shadow: 0 6px 18px var(--shadow);
+  }
+  .add-project:hover { color: var(--ink); }
+
+  .empty {
+    color: var(--muted); text-align: center; padding: 40px 0; font-size: 15px;
+  }
+
+  /* ---- user bar ---- */
+  header.top { flex-wrap: wrap; }
+  .userbar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  .ub-label {
+    font-size: 12px; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--muted); font-weight: 600;
+  }
+  #userSelect {
+    font: inherit; font-size: 14px; font-weight: 600;
+    color: var(--ink);
+    background: var(--panel2, #1c2c4d);
+    border: 1px solid var(--teal-line);
+    border-radius: 8px;
+    padding: 6px 12px; cursor: pointer;
+  }
+  #userSelect option { background: var(--panel2, #1c2c4d); color: var(--ink); }
+  .ub-btn {
+    font: inherit; font-size: 13px; font-weight: 600;
+    color: var(--ink);
+    background: var(--panel2, #1c2c4d);
+    border: 1px solid var(--teal-line);
+    border-radius: 8px;
+    padding: 6px 12px; cursor: pointer;
+  }
+  .ub-btn:hover { background: #26365c; }
+  .ub-btn.primary {
+    background: var(--red); color: #fff; border-color: var(--red-dark);
+  }
+  .ub-btn.primary:hover { background: var(--red-dark); }
+
+  /* ---- project assignment row ---- */
+  .assign-row {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+    margin-top: 12px;
+  }
+  .assign-label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+    color: #b9c8de; font-weight: 600; margin-right: 2px;
+  }
+  .chip {
+    font-size: 12px; font-weight: 600;
+    border-radius: 999px; padding: 3px 10px;
+    border: 1px solid rgba(255,255,255,.28);
+    color: #cdd9ec; background: rgba(255,255,255,.06);
+    cursor: pointer; user-select: none;
+  }
+  .chip:hover { background: rgba(255,255,255,.14); }
+  .chip.on {
+    background: var(--red); border-color: var(--red-dark); color: #fff;
+  }
+  .chip.on:hover { background: var(--red-dark); }
+
+  /* ---- modal ---- */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(10,23,48,.55);
+    display: none; align-items: center; justify-content: center; padding: 20px;
+    z-index: 50;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--panel); border: 1px solid var(--teal-line); border-radius: 16px; width: 100%; max-width: 420px;
+    padding: 22px 22px 18px; box-shadow: 0 20px 60px rgba(0,0,0,.5);
+  }
+  .modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .modal-head h2 { margin: 0; font-size: 19px; color: var(--ink); }
+  .modal-x { background: none; border: none; font-size: 24px; line-height: 1; color: var(--muted); cursor: pointer; }
+  .modal-x:hover { color: var(--red); }
+  .user-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+  .user-item {
+    display: flex; align-items: center; gap: 8px;
+    border: 1px solid var(--teal-line); border-radius: 9px; padding: 8px 10px;
+    background: var(--panel2, #1c2c4d);
+  }
+  .user-item input {
+    flex: 1 1 auto; font: inherit; font-size: 14px; color: var(--ink);
+    border: none; outline: none; background: transparent;
+  }
+  .user-item input:focus { background: rgba(255,255,255,.06); border-radius: 5px; }
+  .user-item .u-del {
+    background: none; border: none; color: var(--ghost); cursor: pointer;
+    font-size: 16px; padding: 2px 6px; border-radius: 5px;
+  }
+  .user-item .u-del:hover { color: var(--red); background: rgba(226,59,78,.14); }
+  .add-user-row { display: flex; gap: 8px; }
+  .add-user-row input {
+    flex: 1 1 auto; font: inherit; font-size: 14px; color: var(--ink);
+    background: var(--panel2, #1c2c4d);
+    border: 1px solid var(--teal-line); border-radius: 9px; padding: 8px 12px; outline: none;
+  }
+  .add-user-row input:focus { border-color: var(--red); }
+  .modal-note { font-size: 12px; color: var(--muted); margin: 12px 0 0; }
+  /* ============ DASHBOARD LAYOUT ============ */
+  body.dash { padding: 0; }
+  .dashboard {
+    display: grid;
+    grid-template-columns: 264px 1fr;
+    min-height: 100vh;
+  }
+  /* --- sidebar --- */
+  .sidebar {
+    background: #0a1120;
+    border-right: 1px solid var(--teal-line);
+    padding: 20px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  }
+  .sb-brand { padding: 2px 8px 4px; display: flex; flex-direction: column; gap: 8px; }
+  .sb-logo { width: 100%; max-width: 200px; height: auto; display: block; }
+  .sb-brand-sub {
+    font-size: 12px; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .11em; padding-left: 2px;
+  }
+  .sb-section-label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .09em;
+    color: var(--muted); font-weight: 600; padding: 0 8px; margin-bottom: 6px;
+  }
+  .sb-users { display: flex; flex-direction: column; gap: 8px; }
+  .sb-users select, .sb-users .ub-btn { width: 100%; }
+  .proj-tabs { display: flex; flex-direction: column; gap: 3px; flex: 1 1 auto; }
+  .proj-tab {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 11px; border-radius: 8px; cursor: pointer;
+    color: var(--muted); font-size: 14px; font-weight: 600;
+    border: 1px solid transparent;
+    background: transparent;
+    text-align: left; width: 100%;
+  }
+  .proj-tab:hover { background: rgba(255,255,255,.04); color: var(--ink); }
+  .proj-tab.active { background: var(--panel); color: var(--ink); border-color: var(--teal-line); }
+  .proj-tab .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--teal-line); flex: none; }
+  .proj-tab.active .dot { background: var(--red); }
+  .proj-tab .nm { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .proj-tab .stg-count { font-size: 11px; color: var(--muted); font-family: 'DM Mono', monospace; }
+  .sb-add-project {
+    background: transparent; border: 1px dashed var(--teal-line);
+    color: var(--muted); border-radius: 8px; padding: 10px;
+    font-size: 13px; font-weight: 600; cursor: pointer; width: 100%;
+  }
+  .sb-add-project:hover { color: var(--red); border-color: var(--red); }
+  .sb-foot { font-size: 11px; color: var(--muted); padding: 0 8px; font-family: 'DM Mono', monospace; }
+
+  /* --- main pane --- */
+  .main {
+    padding: 26px 32px 60px;
+    max-width: 900px;
+  }
+  .main-empty { color: var(--muted); text-align: center; padding: 80px 0; font-size: 15px; }
+  .proj-header { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+  .proj-name-input {
+    font-size: 26px; font-weight: 800; color: var(--ink);
+    background: transparent; border: none; outline: none;
+    padding: 2px 4px; border-radius: 6px; flex: 1 1 auto; letter-spacing: -.01em;
+  }
+  .proj-name-input:focus { background: rgba(255,255,255,.06); }
+  .proj-del-btn {
+    background: transparent; border: 1px solid var(--teal-line);
+    color: var(--muted); border-radius: 8px; padding: 6px 12px;
+    font-size: 12px; font-weight: 600; cursor: pointer; flex: none;
+  }
+  .proj-del-btn:hover { color: var(--red); border-color: var(--red); }
+  .assign-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 14px 0 22px; }
+
+  /* --- stage subtabs --- */
+  .stage-subtabs {
+    display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+    border-bottom: 1px solid var(--teal-line);
+    margin-bottom: 22px;
+  }
+  .stage-subtab {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 9px 14px; cursor: pointer;
+    color: var(--muted); font-size: 14px; font-weight: 600;
+    background: transparent; border: none;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .stage-subtab:hover { color: var(--ink); }
+  .stage-subtab.active { color: var(--ink); border-bottom-color: var(--red); }
+  .stage-subtab .sx {
+    color: var(--muted); font-size: 15px; line-height: 1; padding: 0 2px; border-radius: 4px;
+  }
+  .stage-subtab .sx:hover { color: var(--red); }
+  .stage-add-subtab {
+    padding: 9px 12px; cursor: pointer; color: var(--muted);
+    font-size: 14px; font-weight: 600; background: transparent; border: none;
+  }
+  .stage-add-subtab:hover { color: var(--red); }
+  .stage-panel { display: flex; flex-direction: column; gap: 0; }
+  .stage-panel-head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  .stage-panel-head .sp-label {
+    font-size: 12px; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--muted); font-weight: 600;
+  }
+  .no-stages { color: var(--muted); font-size: 14px; padding: 20px 0; }
+
+  /* ============ SUBMIT-DATA SECTIONS (inline in stage panel) ============ */
+  .data-sections { margin-top: 30px; display: flex; flex-direction: column; gap: 16px; }
+  .data-sections-head {
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+    border-top: 1px solid var(--teal-line); padding-top: 22px;
+  }
+  .data-sections-head h3 { font-size: 15px; font-weight: 700; color: var(--ink); margin: 0; }
+  .ds-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 780px) { .ds-grid { grid-template-columns: 1fr; } }
+  .ds-card {
+    background: #1c2c4d; border: 1px solid var(--teal-line); border-radius: 10px;
+    padding: 18px; display: flex; flex-direction: column; gap: 12px;
+  }
+  .ds-card.full { grid-column: 1 / -1; }
+  .ds-card .num { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--red); }
+  .ds-card h4 { font-size: 14px; font-weight: 600; margin: 0; color: var(--ink); }
+  .ds-card p { font-size: 12px; color: var(--muted); margin: 0; }
+  .ds-btn {
+    background: var(--red); color: #fff; border: none; border-radius: 7px;
+    padding: 9px 14px; font-size: 13px; font-weight: 600; cursor: pointer; align-self: flex-start;
+  }
+  .ds-btn:hover { filter: brightness(1.08); }
+  .ds-btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--teal-line); }
+  .ds-status { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--muted); }
+  .ds-map { height: 320px; border-radius: 8px; border: 1px solid var(--teal-line); margin-top: 4px; }
+  .ds-thumbs { display: flex; flex-wrap: wrap; gap: 8px; }
+  .ds-thumb { width: 58px; height: 58px; object-fit: cover; border-radius: 5px; border: 1px solid var(--teal-line); }
+  .ds-filelist { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--muted); }
+  .ds-tag {
+    display: inline-block; font-family: 'DM Mono', monospace; font-size: 11px;
+    padding: 2px 7px; border-radius: 4px; background: var(--panel); color: var(--red);
+    border: 1px solid var(--teal-line);
+  }
+  .ds-warn { color: #f0a63a; }
+  .ds-file-input {
+    font-size: 13px; color: var(--ink); background: var(--panel);
+    border: 1px solid var(--teal-line); border-radius: 7px; padding: 8px 10px;
+  }
+
+  /* submit-data modals reuse the dashboard modal-backdrop */
+  .ds-modal {
+    background: var(--panel); border: 1px solid var(--teal-line); border-radius: 12px;
+    width: 100%; max-width: 640px; padding: 26px; max-height: 88vh; overflow-y: auto;
+  }
+  .ds-modal h3 { font-size: 17px; margin: 0 0 4px; color: var(--ink); }
+  .ds-modal .sub { font-size: 12px; color: var(--muted); font-family: 'DM Mono', monospace; margin-bottom: 18px; }
+  .ds-field { margin-bottom: 13px; }
+  .ds-field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; font-weight: 500; }
+  .ds-field input, .ds-field textarea, .ds-field select {
+    width: 100%; background: #1c2c4d; border: 1px solid var(--teal-line); border-radius: 6px;
+    color: var(--ink); padding: 9px 11px; font-family: 'Inter', sans-serif; font-size: 14px; outline: none;
+  }
+  .ds-field input:focus, .ds-field textarea:focus { border-color: var(--red); }
+  .ds-field textarea { resize: vertical; min-height: 68px; }
+  .ds-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .ds-check { display: flex; align-items: center; gap: 8px; }
+  .ds-check input { width: auto; }
+  .ds-check label { margin: 0; }
+  .ds-modal-actions { display: flex; gap: 10px; margin-top: 20px; border-top: 1px solid var(--teal-line); padding-top: 16px; }
+  .ds-close { position: absolute; top: 16px; right: 18px; background: none; border: none; color: var(--muted); font-size: 22px; cursor: pointer; }
+  .ds-modal { position: relative; }
+  .ds-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .ds-table th, .ds-table td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--teal-line); }
+  .ds-table th { color: var(--muted); font-weight: 500; font-family: 'DM Mono', monospace; font-size: 11px; text-transform: uppercase; }
+  .ds-table td input { padding: 6px 8px; }
+  .ds-logitem { background: #1c2c4d; border: 1px solid var(--teal-line); border-radius: 6px; padding: 11px 13px; margin-bottom: 8px; font-size: 13px; line-height: 1.6; }
+  .ds-dim { color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body class="dash">
+<div id="gate" style="position:fixed;inset:0;background:var(--page);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px">
+  <div style="background:var(--panel);border:1px solid var(--teal-line);border-radius:16px;padding:32px;max-width:340px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+    <img src="assets/datapoint-logo-dark.png" alt="Datapoint" style="width:100%;max-width:210px;height:auto;display:block;margin:0 auto 18px">
+    <p style="font-size:13px;color:var(--muted);margin:0 0 20px">Enter access password</p>
+    <input type="password" id="gatePw" placeholder="Password"
+      style="width:100%;background:#1c2c4d;border:1px solid var(--teal-line);border-radius:8px;color:var(--ink);padding:10px 12px;font-size:14px;outline:none;margin-bottom:12px"
+      onkeydown="if(event.key==='Enter')checkGate()">
+    <button onclick="checkGate()"
+      style="width:100%;background:var(--red);color:#fff;border:none;border-radius:8px;padding:10px 12px;font-size:14px;font-weight:600;cursor:pointer">Enter</button>
+    <div id="gateErr" style="font-size:12px;color:var(--red);margin-top:12px;min-height:16px"></div>
+  </div>
+</div>
+<script>
+// NOTE: a client-side password is a speed bump, not real security — it's
+// visible in this page's source. Use Supabase Auth for real protection.
+(function(){
+  var PW = "Datapoint@123!";
+  if (sessionStorage.getItem("pt-gate") === "ok") {
+    document.getElementById("gate").style.display = "none";
+  }
+  window.checkGate = function(){
+    var v = document.getElementById("gatePw").value;
+    if (v === PW) {
+      sessionStorage.setItem("pt-gate", "ok");
+      document.getElementById("gate").style.display = "none";
+    } else {
+      document.getElementById("gateErr").textContent = "Incorrect password";
+      document.getElementById("gatePw").value = "";
+    }
+  };
+})();
+</script>
+<div class="dashboard">
+  <aside class="sidebar">
+    <div class="sb-brand">
+      <img src="assets/datapoint-logo-dark.png" alt="Datapoint — Engineering · Land Surveying · GIS · UAS" class="sb-logo">
+      <span class="sb-brand-sub">Project Tracker</span>
+    </div>
+
+    <div>
+      <div class="sb-section-label">Access</div>
+      <div class="sb-users">
+        <select id="userSelect"></select>
+        <button class="ub-btn" id="manageUsers">Manage users</button>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:6px;flex:1 1 auto;min-height:0">
+      <div class="sb-section-label" id="projSectionLabel">Projects</div>
+      <div class="proj-tabs" id="projTabs"></div>
+      <button class="sb-add-project" id="addProject">+ New project</button>
+    </div>
+
+    <div class="sb-foot" id="sbFoot"></div>
+  </aside>
+
+  <main class="main" id="main"></main>
+</div>
+
+<div class="modal-backdrop" id="userModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Manage users</h2>
+      <button class="modal-x" id="closeUsers">&times;</button>
+    </div>
+    <div class="user-list" id="userList"></div>
+    <div class="add-user-row">
+      <input type="text" id="newUserName" placeholder="New user name" />
+      <button class="ub-btn primary" id="addUser">Add user</button>
+    </div>
+    <p class="modal-note">Users and assignments are saved to the shared Supabase database.</p>
+  </div>
+</div>
+
+<!-- SAFETY MODAL -->
+<div class="modal-backdrop" id="safetyModal">
+  <div class="ds-modal">
+    <button class="ds-close" onclick="dsCloseModal('safety')">&times;</button>
+    <h3>Field Safety Form</h3>
+    <div class="sub">JHA / Daily site safety brief</div>
+    <div class="ds-row">
+      <div class="ds-field"><label>Project / Job number</label><input id="s_job"></div>
+      <div class="ds-field"><label>Date</label><input type="date" id="s_date"></div>
+    </div>
+    <div class="ds-row">
+      <div class="ds-field"><label>Crew chief</label><input id="s_chief"></div>
+      <div class="ds-field"><label>Site location</label><input id="s_loc"></div>
+    </div>
+    <div class="ds-field"><label>Weather / conditions</label><input id="s_weather"></div>
+    <div class="ds-field"><label>Identified hazards</label><textarea id="s_hazards" placeholder="Traffic, terrain, wildlife, overhead/underground utilities, H2S, heat…"></textarea></div>
+    <div class="ds-field"><label>Controls / mitigation</label><textarea id="s_controls"></textarea></div>
+    <div class="ds-field"><label>Nearest hospital / emergency contact</label><input id="s_hospital"></div>
+    <div class="ds-field">
+      <label>PPE verified</label>
+      <div class="ds-row">
+        <div class="ds-check"><input type="checkbox" id="ppe1"><label for="ppe1">Hi-vis / hard hat</label></div>
+        <div class="ds-check"><input type="checkbox" id="ppe2"><label for="ppe2">Boots / gloves</label></div>
+        <div class="ds-check"><input type="checkbox" id="ppe3"><label for="ppe3">Hydration</label></div>
+        <div class="ds-check"><input type="checkbox" id="ppe4"><label for="ppe4">Comms / first aid</label></div>
+      </div>
+    </div>
+    <div class="ds-field"><label>Crew sign-off (names)</label><textarea id="s_signoff"></textarea></div>
+    <div class="ds-modal-actions">
+      <button class="ds-btn" onclick="saveSafety()">Save safety form</button>
+      <button class="ds-btn ghost" onclick="dsCloseModal('safety')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- TIMESHEET MODAL -->
+<div class="modal-backdrop" id="timeModal">
+  <div class="ds-modal">
+    <button class="ds-close" onclick="dsCloseModal('time')">&times;</button>
+    <h3>Crew Timesheet</h3>
+    <div class="sub">Field hours by person</div>
+    <div class="ds-row">
+      <div class="ds-field"><label>Project / Job number</label><input id="t_job"></div>
+      <div class="ds-field"><label>Date</label><input type="date" id="t_date"></div>
+    </div>
+    <table class="ds-table" id="timeTable">
+      <thead><tr><th>Name</th><th>Role</th><th>Start</th><th>End</th><th>Hours</th><th></th></tr></thead>
+      <tbody id="timeBody"></tbody>
+    </table>
+    <button class="ds-btn ghost" style="margin-top:12px" onclick="addTimeRow()">+ Add person</button>
+    <div class="ds-modal-actions">
+      <button class="ds-btn" onclick="saveTime()">Save timesheet</button>
+      <button class="ds-btn ghost" onclick="dsCloseModal('time')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- LOGS MODAL -->
+<div class="modal-backdrop" id="logsModal">
+  <div class="ds-modal" style="max-width:760px">
+    <button class="ds-close" onclick="dsCloseModal('logs')">&times;</button>
+    <h3>Submission Logs</h3>
+    <div class="sub" id="logsSub">All saved records for this stage</div>
+    <div id="logsBody"></div>
+  </div>
+</div>
+
+<!-- Supabase client (UMD build, no build step) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// ============================================================
+// SUPABASE SETUP  (open / no-login version)
+// WARNING: With no login and the anon key in this public page,
+// anyone with the URL can read, edit, and delete all data. This
+// is fine for testing with your team; add Supabase Auth + RLS
+// before putting anything sensitive in here.
+// ============================================================
+const SUPABASE_URL = "https://YOURPROJECT.supabase.co";       // <-- from Settings > API
+const SUPABASE_ANON_KEY = "PASTE_YOUR_ANON_PUBLIC_KEY_HERE";  // <-- anon/public key, NOT service_role
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// In-memory mirror of the DB in the shape the render code expects.
+let store = { users: [], projects: [], currentUserId: "__all__", activeProjectId: null, activeStageId: null };
+
+// Load the whole dataset from Supabase into `store`.
+async function loadFromDb() {
+  const [users, projects, assignees, stages, files, notesReady] = await Promise.all([
+    db.from("users").select("*").order("created_at"),
+    db.from("projects").select("*").order("position"),
+    db.from("project_assignees").select("*"),
+    db.from("stages").select("*").order("position"),
+    db.from("stage_files").select("*").order("created_at"),
+    Promise.resolve(null),
+  ]);
+
+  if (users.error || projects.error || stages.error) {
+    console.error("Supabase load error:", users.error || projects.error || stages.error);
+    document.getElementById("main").innerHTML = '<div class="main-empty">Could not reach the database. Check the Supabase URL/key and your network (ThreatLocker allowlist).</div>';
+    return;
+  }
+
+  const assignByProject = {};
+  (assignees.data || []).forEach(a => {
+    (assignByProject[a.project_id] = assignByProject[a.project_id] || []).push(a.user_id);
+  });
+  const filesByStage = {};
+  (files.data || []).forEach(f => {
+    (filesByStage[f.stage_id] = filesByStage[f.stage_id] || []).push(
+      { id: f.id, name: f.name, content: f.content, mime: f.mime }
+    );
+  });
+  const stagesByProject = {};
+  (stages.data || []).forEach(st => {
+    (stagesByProject[st.project_id] = stagesByProject[st.project_id] || []).push({
+      id: st.id, name: st.name, notes: st.notes || "", open: false,
+      files: filesByStage[st.id] || [],
+    });
+  });
+
+  store.users = (users.data || []).map(u => ({ id: u.id, name: u.name }));
+  store.projects = (projects.data || []).map(p => ({
+    id: p.id, name: p.name, collapsed: p.collapsed,
+    assignees: assignByProject[p.id] || [],
+    stages: stagesByProject[p.id] || [],
+  }));
+  render();
+}
+
+// Small helpers that persist a single change. They update `store`
+// optimistically (already done by the caller) then write to the DB.
+async function dbInsert(table, row) {
+  const { data, error } = await db.from(table).insert(row).select().single();
+  if (error) { console.error("insert " + table, error); return null; }
+  return data;
+}
+async function dbUpdate(table, id, patch) {
+  const { error } = await db.from(table).update(patch).eq("id", id);
+  if (error) console.error("update " + table, error);
+}
+async function dbDelete(table, id) {
+  const { error } = await db.from(table).delete().eq("id", id);
+  if (error) console.error("delete " + table, error);
+}
+
+// Debounce text fields (project/stage name, notes) so we don't
+// write on every keystroke.
+const debouncers = {};
+function debounce(key, fn, ms = 500) {
+  clearTimeout(debouncers[key]);
+  debouncers[key] = setTimeout(fn, ms);
+}
+
+function userName(id) {
+  const u = store.users.find(u => u.id === id);
+  return u ? u.name : "Unknown";
+}
+function visibleProjects() {
+  if (store.currentUserId === "__all__") return store.projects;
+  return store.projects.filter(p => p.assignees.includes(store.currentUserId));
+}
+
+const dlIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>';
+const ulIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V9m0 0l-4 4m4-4l4 4M4 3h16"/></svg>';
+const dbIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5h6a1 1 0 011 1v1H8V6a1 1 0 011-1z"/><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 12h6M9 16h4"/></svg>';
+
+const mainEl = document.getElementById("main");
+const projTabsEl = document.getElementById("projTabs");
+
+// Resolve the active project/stage objects from stored ids, with fallbacks.
+function activeProject() {
+  const list = visibleProjects();
+  let p = list.find(x => x.id && x.id === store.activeProjectId);
+  if (!p) p = list[0] || null;
+  store.activeProjectId = p ? p.id : null;
+  return p;
+}
+function activeStage(p) {
+  if (!p) return null;
+  let s = p.stages.find(x => x.id && x.id === store.activeStageId);
+  if (!s) s = p.stages[0] || null;
+  store.activeStageId = s ? s.id : null;
+  return s;
+}
+
+function render() {
+  renderUserSelect();
+  renderSidebar();
+  renderMain();
+}
+
+// ---- sidebar: project tabs ----
+function renderSidebar() {
+  const list = visibleProjects();
+  document.getElementById("projSectionLabel").textContent =
+    "Projects (" + list.length + ")";
+  document.getElementById("sbFoot").textContent =
+    store.currentUserId === "__all__" ? "admin view" : "viewing as " + userName(store.currentUserId);
+
+  projTabsEl.innerHTML = "";
+  if (!list.length) {
+    const none = document.createElement("div");
+    none.className = "sb-foot";
+    none.style.padding = "6px 8px";
+    none.textContent = store.currentUserId === "__all__"
+      ? "No projects yet." : "None assigned to you.";
+    projTabsEl.appendChild(none);
+    return;
+  }
+  const active = activeProject();
+  list.forEach(p => {
+    const tab = document.createElement("button");
+    tab.className = "proj-tab" + (active && p.id === active.id ? " active" : "");
+    tab.innerHTML = '<span class="dot"></span>' +
+      '<span class="nm"></span>' +
+      '<span class="stg-count">' + p.stages.length + '</span>';
+    tab.querySelector(".nm").textContent = p.name || "Untitled";
+    tab.addEventListener("click", () => {
+      store.activeProjectId = p.id;
+      store.activeStageId = null;  // reset to first stage of the new project
+      render();
+    });
+    projTabsEl.appendChild(tab);
+  });
+}
+
+// ---- main pane: active project + its stage subtabs ----
+function renderMain() {
+  const list = visibleProjects();
+  mainEl.innerHTML = "";
+
+  if (!list.length) {
+    const e = document.createElement("div");
+    e.className = "main-empty";
+    e.textContent = store.currentUserId === "__all__"
+      ? "No projects yet. Create one from the sidebar to get started."
+      : "No projects assigned to " + userName(store.currentUserId) + ".";
+    mainEl.appendChild(e);
+    return;
+  }
+
+  const p = activeProject();
+
+  // project header (rename + delete)
+  const header = document.createElement("div");
+  header.className = "proj-header";
+  const title = document.createElement("input");
+  title.className = "proj-name-input";
+  title.value = p.name;
+  title.addEventListener("input", () => {
+    p.name = title.value;
+    debounce("proj-" + p.id, () => dbUpdate("projects", p.id, { name: p.name }));
+    // live-update the sidebar tab label without a full re-render
+    renderSidebar();
+  });
+  header.appendChild(title);
+
+  const pdel = document.createElement("button");
+  pdel.className = "proj-del-btn";
+  pdel.textContent = "Delete project";
+  pdel.addEventListener("click", () => {
+    if (confirm("Delete " + (p.name || "this project") + "?")) {
+      store.projects = store.projects.filter(x => x !== p);
+      dbDelete("projects", p.id);
+      store.activeProjectId = null;
+      store.activeStageId = null;
+      render();
+    }
+  });
+  header.appendChild(pdel);
+  mainEl.appendChild(header);
+
+  // assignment chips
+  const assign = document.createElement("div");
+  assign.className = "assign-bar";
+  const al = document.createElement("span");
+  al.className = "assign-label";
+  al.textContent = "Assigned to";
+  assign.appendChild(al);
+  if (!store.users.length) {
+    const none = document.createElement("span");
+    none.className = "chip"; none.style.cursor = "default";
+    none.textContent = "No users — add some";
+    assign.appendChild(none);
+  } else {
+    store.users.forEach(u => {
+      const chip = document.createElement("span");
+      const on = p.assignees.includes(u.id);
+      chip.className = "chip" + (on ? " on" : "");
+      chip.textContent = u.name;
+      chip.addEventListener("click", () => {
+        if (p.assignees.includes(u.id)) {
+          p.assignees = p.assignees.filter(id => id !== u.id);
+          db.from("project_assignees").delete()
+            .eq("project_id", p.id).eq("user_id", u.id)
+            .then(({ error }) => { if (error) console.error("unassign", error); });
+        } else {
+          p.assignees.push(u.id);
+          db.from("project_assignees").insert({ project_id: p.id, user_id: u.id })
+            .then(({ error }) => { if (error) console.error("assign", error); });
+        }
+        render();
+      });
+      assign.appendChild(chip);
+    });
+  }
+  mainEl.appendChild(assign);
+
+  // stage subtabs
+  const subtabs = document.createElement("div");
+  subtabs.className = "stage-subtabs";
+  const activeS = activeStage(p);
+  p.stages.forEach(s => {
+    const t = document.createElement("button");
+    t.className = "stage-subtab" + (activeS && s.id && s.id === activeS.id ? " active" : "");
+    const label = document.createElement("span");
+    label.textContent = s.name || "Stage";
+    t.appendChild(label);
+    const x = document.createElement("span");
+    x.className = "sx"; x.innerHTML = "&times;"; x.title = "Remove stage";
+    x.addEventListener("click", ev => {
+      ev.stopPropagation();
+      if (!confirm("Remove stage \"" + (s.name || "") + "\"?")) return;
+      p.stages = p.stages.filter(y => y !== s);
+      if (s.id) dbDelete("stages", s.id);
+      if (store.activeStageId === s.id) store.activeStageId = null;
+      render();
+    });
+    t.appendChild(x);
+    t.addEventListener("click", () => { store.activeStageId = s.id; render(); });
+    subtabs.appendChild(t);
+  });
+  const addTab = document.createElement("button");
+  addTab.className = "stage-add-subtab";
+  addTab.textContent = "+ Stage";
+  addTab.addEventListener("click", async () => {
+    const s = { id: null, name: "Preliminary", notes: "", files: [] };
+    p.stages.push(s);
+    render();
+    const row = await dbInsert("stages", {
+      project_id: p.id, name: s.name, notes: "", position: p.stages.length,
+    });
+    if (row) { s.id = row.id; store.activeStageId = s.id; render(); }
+  });
+  subtabs.appendChild(addTab);
+  mainEl.appendChild(subtabs);
+
+  // active stage panel
+  if (!p.stages.length) {
+    const ns = document.createElement("div");
+    ns.className = "no-stages";
+    ns.textContent = "No stages yet. Add one with “+ Stage”.";
+    mainEl.appendChild(ns);
+    return;
+  }
+  mainEl.appendChild(renderStagePanel(p, activeS));
+}
+
+// The per-stage content: stage-name selector, action row (Upload/Download/Submit),
+// and survey notes. Same handlers/logic as before, just no collapsible band.
+function renderStagePanel(p, s) {
+  const panel = document.createElement("div");
+  panel.className = "stage-panel";
+
+  const head = document.createElement("div");
+  head.className = "stage-panel-head";
+  const lab = document.createElement("span");
+  lab.className = "sp-label";
+  lab.textContent = "Stage type";
+  head.appendChild(lab);
+
+  const name = document.createElement("select");
+  name.className = "stage-name";
+  name.style.maxWidth = "220px";
+  ["Preliminary", "As-Built"].forEach(opt => {
+    const o = document.createElement("option");
+    o.value = opt; o.textContent = opt;
+    name.appendChild(o);
+  });
+  if (!["Preliminary", "As-Built"].includes(s.name)) {
+    const o = document.createElement("option");
+    o.value = s.name; o.textContent = s.name;
+    name.appendChild(o);
+  }
+  name.value = s.name;
+  name.addEventListener("change", () => {
+    s.name = name.value;
+    if (s.id) dbUpdate("stages", s.id, { name: s.name });
+    render();  // refresh subtab label
+  });
+  head.appendChild(name);
+  panel.appendChild(head);
+
+  // action row: Upload FXL + Download FXL + Submit Data
+  const actionRow = document.createElement("div");
+  actionRow.className = "file-row";
+
+  const ul = document.createElement("button");
+  ul.className = "ul";
+  ul.innerHTML = ulIcon + "<span>Upload FXL</span>";
+  ul.addEventListener("click", () => {
+    if (!s.id) { alert("Give this new stage a moment to save, then try again."); return; }
+    const url = "fxl-feature-matcher.html?stage=" + encodeURIComponent(s.id) +
+                "&projectName=" + encodeURIComponent(p.name) +
+                "&stageName=" + encodeURIComponent(s.name);
+    window.open(url, "_blank");
+  });
+  actionRow.appendChild(ul);
+
+  const fxl = s.files[0];
+
+  const dl = document.createElement("button");
+  dl.className = "dl";
+  dl.innerHTML = dlIcon + "<span>Download FXL</span>";
+  dl.disabled = !fxl || fxl.content == null;
+  dl.addEventListener("click", () => { if (fxl) downloadFile(fxl, p, s); });
+  actionRow.appendChild(dl);
+
+  if (fxl) {
+    const fn = document.createElement("span");
+    fn.className = "file-name";
+    fn.textContent = fxl.name;
+    actionRow.appendChild(fn);
+
+    const x = document.createElement("button");
+    x.className = "file-x";
+    x.innerHTML = "&times;";
+    x.title = "Remove uploaded FXL";
+    x.addEventListener("click", () => {
+      s.files = s.files.filter(y => y !== fxl);
+      if (fxl.id) dbDelete("stage_files", fxl.id);
+      render();
+    });
+    actionRow.appendChild(x);
+  }
+  panel.appendChild(actionRow);
+
+  // survey notes
+  const nl = document.createElement("div");
+  nl.className = "notes-label";
+  nl.textContent = "Survey notes";
+  panel.appendChild(nl);
+
+  const ta = document.createElement("textarea");
+  ta.className = "notes";
+  ta.placeholder = "Add notes for this stage…";
+  ta.value = s.notes || "";
+  ta.addEventListener("input", () => {
+    s.notes = ta.value;
+    if (s.id) debounce("notes-" + s.id, () => dbUpdate("stages", s.id, { notes: s.notes }));
+  });
+  panel.appendChild(ta);
+
+  // ---- inline submit-data sections (safety / timesheet / photos / files) ----
+  panel.appendChild(buildDataSections(p, s));
+
+  return panel;
+}
+
+// Builds the four data-capture sections for the given stage and wires them
+// to the current stage's records. Called fresh each time a stage panel renders.
+function buildDataSections(p, s) {
+  const wrap = document.createElement("div");
+  wrap.className = "data-sections";
+
+  const head = document.createElement("div");
+  head.className = "data-sections-head";
+  head.innerHTML = '<h3>Field data submission</h3>';
+  const logsBtn = document.createElement("button");
+  logsBtn.className = "ds-btn ghost";
+  logsBtn.textContent = "View logs";
+  logsBtn.addEventListener("click", () => openLogs());
+  head.appendChild(logsBtn);
+  wrap.appendChild(head);
+
+  const grid = document.createElement("div");
+  grid.className = "ds-grid";
+  grid.innerHTML =
+    '<div class="ds-card">' +
+      '<span class="num">01</span><h4>Field Safety Form</h4>' +
+      '<p>Crew, site hazards, JHA sign-off, and PPE checks.</p>' +
+      '<button class="ds-btn" id="btnSafety">Open safety form</button>' +
+      '<div id="safetyStatus" class="ds-status"></div>' +
+    '</div>' +
+    '<div class="ds-card">' +
+      '<span class="num">02</span><h4>Crew Timesheet</h4>' +
+      '<p>Names and hours for everyone on the crew.</p>' +
+      '<button class="ds-btn" id="btnTime">Open timesheet</button>' +
+      '<div id="timeStatus" class="ds-status"></div>' +
+    '</div>' +
+    '<div class="ds-card full">' +
+      '<span class="num">03</span><h4>Geotagged Photos</h4>' +
+      '<p>Photos with embedded GPS plot automatically; others are listed separately.</p>' +
+      '<input type="file" id="photoInput" accept="image/*" multiple class="ds-file-input">' +
+      '<div id="photonote" class="ds-status"></div>' +
+      '<div class="ds-thumbs" id="thumbs"></div>' +
+      '<div class="ds-map" id="map"></div>' +
+    '</div>' +
+    '<div class="ds-card full">' +
+      '<span class="num">04</span><h4>File Upload</h4>' +
+      '<p>Attach survey data, CAD files, point clouds, or documents.</p>' +
+      '<input type="file" id="fileInput" multiple class="ds-file-input">' +
+      '<div id="filelist" class="ds-filelist">No files added.</div>' +
+    '</div>';
+  wrap.appendChild(grid);
+
+  // defer wiring until the nodes are in the DOM (map needs a sized container)
+  setTimeout(() => initDataSections(p, s), 0);
+  return wrap;
+}
+
+// Downloads the actual uploaded file bytes if present. Files gain `content`
+// when uploaded via the FXL matcher or the "+ Add file" picker.
+function downloadFile(f, p, s) {
+  if (f.content == null) {
+    alert("No file has been uploaded for \"" + f.name + "\" yet.\n\n" +
+          "Use \"Upload FXL\" to add one, or remove this entry.");
+    return;
+  }
+  const blob = new Blob([f.content], { type: f.mime || "application/octet-stream" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = f.name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ============================================================
+// SUBMIT-DATA MODULE  (safety / timesheet / photos / files)
+// Ported from the old submission page, now stage-aware. All records
+// live in the `submissions` table keyed by stage_id.
+// ============================================================
+let dsStage = null;         // the stage whose sections are currently shown
+let dsProject = null;
+let dsLogs = { safety: [], time: [], photos: [], files: [] };
+let dsMap = null, dsMarkers = [];
+
+function dsEmptyLogs(){ return { safety: [], time: [], photos: [], files: [] }; }
+
+// Wire the freshly-rendered sections to a stage and load its records.
+async function initDataSections(p, s) {
+  dsProject = p;
+  dsStage = s;
+  dsLogs = dsEmptyLogs();
+
+  // reset map handle (the old node was removed when the panel re-rendered)
+  dsMap = null; dsMarkers = [];
+
+  const today = new Date().toISOString().slice(0, 10);
+  const sd = document.getElementById("s_date"); if (sd) sd.value = today;
+  const td = document.getElementById("t_date"); if (td) td.value = today;
+  const sj = document.getElementById("s_job"); if (sj) sj.value = p.name || "";
+  const tj = document.getElementById("t_job"); if (tj) tj.value = p.name || "";
+
+  // section buttons
+  const bS = document.getElementById("btnSafety");
+  if (bS) bS.onclick = () => dsOpenModal("safety");
+  const bT = document.getElementById("btnTime");
+  if (bT) bT.onclick = () => dsOpenModal("time");
+
+  // photo + file inputs
+  const pi = document.getElementById("photoInput");
+  if (pi) pi.onchange = onPhotoInput;
+  const fi = document.getElementById("fileInput");
+  if (fi) fi.onchange = onFileInput;
+
+  initMap();
+
+  // load this stage's saved records
+  if (s.id) {
+    const { data, error } = await db.from("submissions").select("*")
+      .eq("stage_id", s.id).order("created_at");
+    if (error) { console.error("load submissions", error); }
+    else (data || []).forEach(r => { if (dsLogs[r.kind]) dsLogs[r.kind].push(r.data); });
+  }
+  plotSaved();
+  renderFileList();
+  refreshStatus();
+}
+
+async function saveRecord(kind, data) {
+  if (!dsStage || !dsStage.id) { alert("Give this new stage a moment to save, then try again."); return; }
+  dsLogs[kind].push(data);
+  const { error } = await db.from("submissions").insert({ stage_id: dsStage.id, kind, data });
+  if (error) console.error("save " + kind, error);
+}
+
+// ---- modals ----
+function dsOpenModal(k){
+  if (k === "time") {
+    const tb = document.getElementById("timeBody");
+    if (tb && !tb.children.length) addTimeRow();
+  }
+  document.getElementById(k + "Modal").classList.add("open");
+}
+function dsCloseModal(k){ document.getElementById(k + "Modal").classList.remove("open"); }
+
+// ---- safety ----
+function saveSafety() {
+  const g = id => (document.getElementById(id) || {}).value || "";
+  const ppe = ["ppe1","ppe2","ppe3","ppe4"].filter(id => { const el = document.getElementById(id); return el && el.checked; }).length;
+  const rec = { job: g("s_job") || "(no job#)", date: g("s_date"), chief: g("s_chief"), loc: g("s_loc"),
+    weather: g("s_weather"), hazards: g("s_hazards"), controls: g("s_controls"),
+    hospital: g("s_hospital"), ppe, signoff: g("s_signoff"), ts: new Date().toLocaleString() };
+  saveRecord("safety", rec);
+  refreshStatus();
+  dsCloseModal("safety");
+  // clear the free-text fields for the next entry
+  ["s_chief","s_loc","s_weather","s_hazards","s_controls","s_hospital","s_signoff"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
+  ["ppe1","ppe2","ppe3","ppe4"].forEach(id => { const el = document.getElementById(id); if (el) el.checked = false; });
+}
+
+// ---- timesheet ----
+function addTimeRow() {
+  const tb = document.getElementById("timeBody");
+  if (!tb) return;
+  const tr = document.createElement("tr");
+  tr.innerHTML = '<td><input class="nm"></td><td><input class="rl"></td>' +
+    '<td><input type="time" class="st"></td><td><input type="time" class="en"></td>' +
+    '<td><input class="hr" style="width:60px" placeholder="0"></td>' +
+    '<td><button class="ds-close" style="position:static;font-size:18px" onclick="this.closest(\'tr\').remove()">&times;</button></td>';
+  tb.appendChild(tr);
+  const st = tr.querySelector(".st"), en = tr.querySelector(".en"), hr = tr.querySelector(".hr");
+  const calc = () => { if (st.value && en.value) { let [a,b]=st.value.split(":").map(Number); let [c,d]=en.value.split(":").map(Number); let m=(c*60+d)-(a*60+b); if(m<0)m+=1440; hr.value=(m/60).toFixed(2); } };
+  st.onchange = calc; en.onchange = calc;
+}
+function saveTime() {
+  const rows = [...document.querySelectorAll("#timeBody tr")].filter(r => r.querySelector(".nm").value);
+  const crew = rows.map(r => ({ name: r.querySelector(".nm").value, role: r.querySelector(".rl").value,
+    start: r.querySelector(".st").value, end: r.querySelector(".en").value, hours: r.querySelector(".hr").value }));
+  const total = crew.reduce((sum,c) => sum + (parseFloat(c.hours)||0), 0);
+  const rec = { job: (document.getElementById("t_job")||{}).value || "(no job#)",
+    date: (document.getElementById("t_date")||{}).value, crew, total: total.toFixed(2), ts: new Date().toLocaleString() };
+  saveRecord("time", rec);
+  refreshStatus();
+  dsCloseModal("time");
+  const tb = document.getElementById("timeBody"); if (tb) tb.innerHTML = "";
+  addTimeRow();
+}
+
+// ---- map ----
+function initMap() {
+  const el = document.getElementById("map");
+  if (!el || typeof L === "undefined") return;
+  dsMap = L.map(el).setView([31.9, -102.1], 6); // Permian Basin default
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(dsMap);
+  setTimeout(() => dsMap && dsMap.invalidateSize(), 120);
+}
+function dms(arr, ref) {
+  let d = arr[0].numerator/arr[0].denominator + arr[1].numerator/arr[1].denominator/60 + arr[2].numerator/arr[2].denominator/3600;
+  if (ref === "S" || ref === "W") d = -d;
+  return d;
+}
+function plotSaved() {
+  if (!dsMap) return;
+  dsLogs.photos.filter(p => p.lat).forEach(p => {
+    const m = L.marker([+p.lat, +p.lon]).addTo(dsMap).bindPopup("<b>" + p.name + "</b><br>" + p.lat + ", " + p.lon);
+    dsMarkers.push(m);
+  });
+  if (dsMarkers.length) dsMap.fitBounds(L.featureGroup(dsMarkers).getBounds().pad(0.3));
+  updatePhotoNote();
+}
+function updatePhotoNote() {
+  const note = document.getElementById("photonote");
+  if (!note) return;
+  const geo = dsLogs.photos.filter(p => p.lat).length, noGeo = dsLogs.photos.length - geo;
+  note.innerHTML = dsLogs.photos.length ? (geo + " plotted" + (noGeo ? ' · <span class="ds-warn">' + noGeo + " without GPS data</span>" : "")) : "";
+}
+function onPhotoInput(e) {
+  const files = [...e.target.files];
+  files.forEach(file => {
+    const thumbs = document.getElementById("thumbs");
+    if (thumbs) { const img = document.createElement("img"); img.src = URL.createObjectURL(file); img.className = "ds-thumb"; thumbs.appendChild(img); }
+    EXIF.getData(file, function () {
+      const lat = EXIF.getTag(this, "GPSLatitude"), lon = EXIF.getTag(this, "GPSLongitude");
+      const latR = EXIF.getTag(this, "GPSLatitudeRef"), lonR = EXIF.getTag(this, "GPSLongitudeRef");
+      let rec;
+      if (lat && lon) {
+        const la = dms(lat, latR), lo = dms(lon, lonR);
+        if (dsMap) { const m = L.marker([la, lo]).addTo(dsMap).bindPopup("<b>" + file.name + "</b><br>" + la.toFixed(6) + ", " + lo.toFixed(6)); dsMarkers.push(m); dsMap.fitBounds(L.featureGroup(dsMarkers).getBounds().pad(0.3)); }
+        rec = { name: file.name, lat: la.toFixed(6), lon: lo.toFixed(6) };
+      } else { rec = { name: file.name, lat: null, lon: null }; }
+      saveRecord("photo", rec);
+      updatePhotoNote();
+    });
+  });
+  e.target.value = "";
+}
+
+// ---- files ----
+function onFileInput(e) {
+  [...e.target.files].forEach(f => { saveRecord("file", { name: f.name, size: (f.size/1024).toFixed(0) + " KB" }); });
+  renderFileList();
+  e.target.value = "";
+}
+function renderFileList() {
+  const el = document.getElementById("filelist");
+  if (!el) return;
+  el.innerHTML = dsLogs.files.length
+    ? dsLogs.files.map(f => "<div>▸ " + f.name + ' <span style="color:#6a7264">(' + f.size + ")</span></div>").join("")
+    : "No files added.";
+}
+
+// ---- status lines ----
+function refreshStatus() {
+  const ss = document.getElementById("safetyStatus");
+  if (ss) { const s = dsLogs.safety[dsLogs.safety.length-1]; ss.innerHTML = dsLogs.safety.length ? ('<span class="ds-tag">saved</span> ' + dsLogs.safety.length + " form(s) · latest " + s.job + " — " + s.date) : ""; }
+  const ts = document.getElementById("timeStatus");
+  if (ts) { const t = dsLogs.time[dsLogs.time.length-1]; ts.innerHTML = dsLogs.time.length ? ('<span class="ds-tag">saved</span> ' + dsLogs.time.length + " sheet(s) · latest " + t.crew.length + " crew · " + t.total + " hrs") : ""; }
+}
+
+// ---- logs viewer ----
+function dsEsc(s){ return (s||"").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+function openLogs() {
+  const scope = (dsProject ? dsProject.name : "") + (dsStage ? " · " + dsStage.name : "");
+  const sub = document.getElementById("logsSub");
+  if (sub) sub.textContent = "Saved records for " + (scope || "this stage");
+  let h = "";
+  h += '<h4 style="margin:14px 0 6px;font-size:13px;color:var(--red);font-family:\'DM Mono\',monospace">01 · Safety forms (' + dsLogs.safety.length + ")</h4>";
+  h += dsLogs.safety.length ? dsLogs.safety.map(r => '<div class="ds-logitem"><b>' + dsEsc(r.job) + "</b> · " + r.date + " · " + (dsEsc(r.chief)||"—") + "<br>" +
+    '<span class="ds-dim">' + dsEsc(r.loc) + " · PPE " + r.ppe + "/4 · hazards: " + (dsEsc(r.hazards)||"none noted") + "</span><br>" +
+    '<span class="ds-dim">signed: ' + (dsEsc(r.signoff)||"—") + " · <i>" + r.ts + "</i></span></div>").join("") : '<div class="ds-dim">None yet.</div>';
+  h += '<h4 style="margin:14px 0 6px;font-size:13px;color:var(--red);font-family:\'DM Mono\',monospace">02 · Timesheets (' + dsLogs.time.length + ")</h4>";
+  h += dsLogs.time.length ? dsLogs.time.map(r => '<div class="ds-logitem"><b>' + dsEsc(r.job) + "</b> · " + r.date + " · " + r.total + " hrs total<br>" +
+    r.crew.map(c => '<span class="ds-dim">• ' + dsEsc(c.name) + " (" + (dsEsc(c.role)||"—") + ") " + (c.start||"") + "–" + (c.end||"") + " = " + (c.hours||0) + "h</span>").join("<br>") +
+    '<br><span class="ds-dim"><i>' + r.ts + "</i></span></div>").join("") : '<div class="ds-dim">None yet.</div>';
+  const geo = dsLogs.photos.filter(p => p.lat);
+  h += '<h4 style="margin:14px 0 6px;font-size:13px;color:var(--red);font-family:\'DM Mono\',monospace">03 · Photos (' + dsLogs.photos.length + ", " + geo.length + " geotagged)</h4>";
+  h += dsLogs.photos.length ? dsLogs.photos.map(p => '<div class="ds-dim">▸ ' + dsEsc(p.name) + " " + (p.lat ? "— " + p.lat + ", " + p.lon : '<span class="ds-warn">no GPS</span>') + "</div>").join("") : '<div class="ds-dim">None yet.</div>';
+  h += '<h4 style="margin:14px 0 6px;font-size:13px;color:var(--red);font-family:\'DM Mono\',monospace">04 · Files (' + dsLogs.files.length + ")</h4>";
+  h += dsLogs.files.length ? dsLogs.files.map(f => '<div class="ds-dim">▸ ' + dsEsc(f.name) + " (" + f.size + ")</div>").join("") : '<div class="ds-dim">None yet.</div>';
+  const lb = document.getElementById("logsBody"); if (lb) lb.innerHTML = h;
+  dsOpenModal("logs");
+}
+
+// close data modals on backdrop click / Escape
+["safetyModal","timeModal","logsModal"].forEach(id => {
+  const m = document.getElementById(id);
+  if (m) m.addEventListener("click", e => { if (e.target === m) m.classList.remove("open"); });
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape") ["safetyModal","timeModal","logsModal"].forEach(id => { const m = document.getElementById(id); if (m) m.classList.remove("open"); }); });
+
+document.getElementById("addProject").addEventListener("click", async () => {
+  // new projects are auto-assigned to whoever you're viewing as, so they show up
+  const assignTo = store.currentUserId === "__all__" ? null : store.currentUserId;
+  const p = { id: null, name: "New Project", collapsed: false,
+              assignees: assignTo ? [assignTo] : [], stages: [] };
+  store.projects.push(p);
+  render();
+  const row = await dbInsert("projects", {
+    name: p.name, collapsed: false, position: store.projects.length,
+  });
+  if (row) {
+    p.id = row.id;
+    store.activeProjectId = p.id;   // open the new project's tab
+    store.activeStageId = null;
+    if (assignTo) {
+      await db.from("project_assignees").insert({ project_id: p.id, user_id: assignTo });
+    }
+    render();
+  }
+});
+
+/* ---- user switcher ---- */
+const userSelect = document.getElementById("userSelect");
+function renderUserSelect() {
+  userSelect.innerHTML = "";
+  const all = document.createElement("option");
+  all.value = "__all__"; all.textContent = "All users (admin)";
+  userSelect.appendChild(all);
+  store.users.forEach(u => {
+    const o = document.createElement("option");
+    o.value = u.id; o.textContent = u.name;
+    userSelect.appendChild(o);
+  });
+  // fall back to admin view if the selected user was deleted
+  if (store.currentUserId !== "__all__" && !store.users.some(u => u.id === store.currentUserId))
+    store.currentUserId = "__all__";
+  userSelect.value = store.currentUserId;
+}
+userSelect.addEventListener("change", () => {
+  store.currentUserId = userSelect.value;  // view-only, not persisted
+  render();
+});
+
+/* ---- manage-users modal ---- */
+const modal = document.getElementById("userModal");
+const userListEl = document.getElementById("userList");
+
+function renderUserList() {
+  userListEl.innerHTML = "";
+  if (!store.users.length) {
+    userListEl.innerHTML = '<div class="empty" style="padding:16px 0">No users yet.</div>';
+    return;
+  }
+  store.users.forEach(u => {
+    const row = document.createElement("div");
+    row.className = "user-item";
+
+    const inp = document.createElement("input");
+    inp.value = u.name;
+    inp.addEventListener("input", () => {
+      u.name = inp.value;
+      debounce("user-" + u.id, () => dbUpdate("users", u.id, { name: u.name }));
+      render();
+    });
+    row.appendChild(inp);
+
+    const del = document.createElement("button");
+    del.className = "u-del"; del.innerHTML = "&times;"; del.title = "Remove user";
+    del.addEventListener("click", () => {
+      if (!confirm("Remove " + (u.name || "this user") + "? They'll be unassigned from all projects.")) return;
+      store.users = store.users.filter(x => x !== u);
+      store.projects.forEach(p => { p.assignees = p.assignees.filter(id => id !== u.id); });
+      dbDelete("users", u.id);  // cascade removes their project_assignees rows
+      renderUserList(); render();
+    });
+    row.appendChild(del);
+
+    userListEl.appendChild(row);
+  });
+}
+
+function openUsers() { renderUserList(); modal.classList.add("open"); }
+function closeUsers() { modal.classList.remove("open"); }
+
+document.getElementById("manageUsers").addEventListener("click", openUsers);
+document.getElementById("closeUsers").addEventListener("click", closeUsers);
+modal.addEventListener("click", e => { if (e.target === modal) closeUsers(); });
+
+const newUserName = document.getElementById("newUserName");
+async function addUser() {
+  const nm = newUserName.value.trim();
+  if (!nm) return;
+  const u = { id: null, name: nm };
+  store.users.push(u);
+  newUserName.value = "";
+  renderUserList(); render();
+  const row = await dbInsert("users", { name: nm });
+  if (row) u.id = row.id;
+}
+document.getElementById("addUser").addEventListener("click", addUser);
+newUserName.addEventListener("keydown", e => { if (e.key === "Enter") addUser(); });
+
+// When the FXL matcher or submission page (another tab) changes data,
+// reload from the database on focus so new files/edits show up here.
+let lastFocusReload = 0;
+window.addEventListener("focus", () => {
+  const now = Date.now();
+  if (now - lastFocusReload > 1500) { lastFocusReload = now; loadFromDb(); }
+});
+
+// initial load from Supabase
+loadFromDb();
+</script>
+</body>
+</html>
