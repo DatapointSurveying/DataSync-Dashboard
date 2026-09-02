@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FXL Feature Matcher</title>
+<style>
+  :root {
+    --blue:      #14203a;
+    --blue-dark: #1c2c4d;
+    --band:      #1c2c4d;
+    --band-line: #2a3d63;
+    --panel:     #14203a;
+    --panel2:    #1c2c4d;
+    --ink:       #e6ecf7;
+    --muted:     #8397bd;
+    --ghost:     #8397bd;
+    --page:      #0d1526;
+    --shadow:    rgba(0,0,0,.4);
+    --red:       #e23b4e;
+    --red-dark:  #c62438;
+    --green:     #3ecf8e;
+    --green-bg:  rgba(62,207,142,.14);
+  }
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap');
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    padding: 24px 20px 80px;
+    line-height: 1.45;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+
+  .topbar {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+  .back {
+    text-decoration: none;
+    font-size: 13px; font-weight: 600;
+    color: var(--ink);
+    background: var(--panel2); border: 1px solid var(--band-line);
+    border-radius: 8px; padding: 7px 13px;
+  }
+  .back:hover { background: #26365c; border-color: var(--red); }
+  h1 {
+    font-size: 20px; margin: 0; color: var(--ink);
+    font-weight: 800; letter-spacing: .01em;
+  }
+  .ctx { font-size: 13px; color: var(--muted); }
+
+  /* upload zone */
+  .drop {
+    display: block;
+    width: 100%;
+    background: var(--blue);
+    border-radius: 18px;
+    padding: 34px 24px;
+    text-align: center;
+    color: #cdd9ec;
+    box-shadow: 0 6px 18px var(--shadow);
+    cursor: pointer;
+    border: 2px dashed rgba(255,255,255,.28);
+    transition: background .15s, border-color .15s;
+  }
+  .drop.dragover { background: var(--blue-dark); border-color: var(--red); }
+  .drop h2 { color: #fff; margin: 0 0 6px; font-size: 20px; }
+  .drop p { margin: 0; font-size: 14px; }
+  .drop .browse { color: #fff; text-decoration: underline; font-weight: 600; }
+  input[type=file] { display: none; }
+
+  .status {
+    margin: 14px 2px; font-size: 14px; color: var(--muted);
+  }
+  .status.err { color: var(--red); font-weight: 600; }
+  .status.ok  { color: var(--green); font-weight: 600; }
+
+  /* toolbar over table */
+  .table-tools {
+    display: none;
+    align-items: center; gap: 12px; flex-wrap: wrap;
+    margin: 18px 2px 10px;
+  }
+  .table-tools.show { display: flex; }
+  .pill {
+    font-size: 12px; font-weight: 600;
+    background: var(--panel2); border: 1px solid var(--band-line);
+    border-radius: 999px; padding: 4px 12px; color: var(--ink);
+  }
+  .pill.warn { background: rgba(240,166,58,.16); border-color: rgba(240,166,58,.4); color: var(--warn, #f0a63a); }
+  .pill.done { background: var(--green-bg); border-color: rgba(62,207,142,.4); color: var(--green); }
+  .btn {
+    font: inherit; font-size: 13px; font-weight: 600;
+    border-radius: 8px; padding: 7px 14px; cursor: pointer; border: 1px solid;
+  }
+  .btn.primary { background: var(--red); color: #fff; border-color: var(--red-dark); }
+  .btn.primary:hover { background: var(--red-dark); }
+  .btn.ghost { background: var(--panel2); color: var(--ink); border-color: var(--band-line); }
+  .btn.ghost:hover { background: #26365c; }
+  .spacer { flex: 1 1 auto; }
+
+  /* match table */
+  .matcher { display: none; }
+  .matcher.show { display: block; }
+  table { width: 100%; border-collapse: collapse; background: var(--panel);
+    border-radius: 12px; overflow: hidden; box-shadow: 0 6px 18px var(--shadow); }
+  thead th {
+    background: var(--panel2); color: var(--ink); text-align: left;
+    font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+    padding: 11px 14px; font-weight: 700;
+  }
+  tbody td { padding: 10px 14px; border-top: 1px solid var(--band-line); vertical-align: middle; }
+  tbody tr:hover { background: rgba(255,255,255,.03); }
+  .fcode { font-weight: 700; color: var(--ink); }
+  .fdesc { font-size: 12px; color: var(--muted); }
+  .ftype { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--ghost); }
+  select.match {
+    width: 100%; max-width: 340px;
+    font: inherit; font-size: 14px; color: var(--ink);
+    border: 1px solid var(--band-line); border-radius: 8px; padding: 7px 10px;
+    background: var(--panel2); cursor: pointer;
+  }
+  select.match option { background: var(--panel2); color: var(--ink); }
+  select.match:focus { outline: none; border-color: var(--red); }
+  select.match.unset { color: var(--muted); border-color: rgba(240,166,58,.55); background: rgba(240,166,58,.08); }
+  select.match.set { border-color: rgba(62,207,142,.55); background: var(--green-bg); }
+  td.state { width: 34px; text-align: center; font-size: 16px; }
+
+  .hint { font-size: 12px; color: var(--muted); margin: 8px 4px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <a class="back" href="index.html">&larr; Back to projects</a>
+    <h1>FXL Feature Matcher</h1>
+    <span class="ctx" id="ctx"></span>
+  </div>
+
+  <div class="drop" id="drop">
+    <h2>Upload FXL feature library</h2>
+    <p>Drag &amp; drop a <strong>.fxl</strong> file here, or <span class="browse">browse</span></p>
+    <input type="file" id="file" accept=".fxl,.xml" />
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <div class="table-tools" id="tools">
+    <span class="pill" id="pillTotal">0 features</span>
+    <span class="pill warn" id="pillUnmatched">0 unmatched</span>
+    <span class="pill done" id="pillMatched" style="display:none">0 matched</span>
+    <div class="spacer"></div>
+    <button class="btn ghost" id="autoBtn">Auto-match by name</button>
+    <button class="btn ghost" id="clearBtn">Clear matches</button>
+    <button class="btn primary" id="exportBtn">Export mapping (CSV)</button>
+  </div>
+
+  <div class="matcher" id="matcher">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:34px"></th>
+          <th>FXL feature</th>
+          <th>Type</th>
+          <th>Matched standard feature</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <p class="hint">Matches are saved to the shared database for this stage. Export the mapping as CSV when you're done.</p>
+  </div>
+</div>
+
+<!-- Supabase client (UMD build, no build step) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+/* ---- 20 standard oil & gas surveying features ---- */
+const STANDARD_FEATURES = [
+  { code: "WELLHD", name: "Well Head" },
+  { code: "PADEDGE", name: "Well Pad Edge" },
+  { code: "TANKBAT", name: "Tank Battery" },
+  { code: "SEPARATOR", name: "Separator" },
+  { code: "METER", name: "Meter / Metering Skid" },
+  { code: "COMPRSTN", name: "Compressor Station" },
+  { code: "VALVE", name: "Valve" },
+  { code: "PIGLNCH", name: "Pig Launcher / Receiver" },
+  { code: "PL_CL", name: "Pipeline Centerline" },
+  { code: "PL_MKR", name: "Pipeline Marker" },
+  { code: "ROW", name: "Right-of-Way Line" },
+  { code: "FENCE", name: "Fence Line" },
+  { code: "ACCRD", name: "Access Road" },
+  { code: "CATTLEGD", name: "Cattle Guard" },
+  { code: "POWERPOLE", name: "Power Pole" },
+  { code: "OHELEC", name: "Overhead Electric Line" },
+  { code: "CULVERT", name: "Culvert" },
+  { code: "PROPCOR", name: "Property Corner" },
+  { code: "SECMON", name: "Section Corner Monument" },
+  { code: "CONTROL", name: "Survey Control Point" },
+];
+
+/* ---- Supabase (open / no-login) ---- */
+const SUPABASE_URL = "https://YOURPROJECT.supabase.co";       // <-- from Settings > API
+const SUPABASE_ANON_KEY = "PASTE_YOUR_ANON_PUBLIC_KEY_HERE";  // <-- anon/public key
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* ---- state ---- */
+const params = new URLSearchParams(location.search);
+const stageId = params.get("stage");     // stage UUID from the tracker link
+const projName = params.get("projectName"); // just for display
+const stageName = params.get("stageName");  // just for display
+const ctxEl = document.getElementById("ctx");
+if (projName) {
+  ctxEl.textContent = "for " + projName + (stageName ? " · " + stageName : "");
+}
+
+let features = [];   // { id, code, desc, type }
+let matches = {};    // { fxlFeatureKey: standardCode }
+
+// Load any existing matches for this stage from the DB.
+async function loadMatches() {
+  if (!stageId) return {};
+  const { data, error } = await db.from("fxl_matches").select("*").eq("stage_id", stageId);
+  if (error) { console.error("load matches", error); return {}; }
+  const m = {};
+  (data || []).forEach(r => { m[r.fxl_code] = r.standard_code; });
+  return m;
+}
+
+// Upsert one match (fxl code -> standard code) for this stage.
+async function saveMatch(fxlKey, standardCode) {
+  if (!stageId) return;
+  if (standardCode) {
+    const { error } = await db.from("fxl_matches")
+      .upsert({ stage_id: stageId, fxl_code: fxlKey, standard_code: standardCode },
+              { onConflict: "stage_id,fxl_code" });
+    if (error) console.error("save match", error);
+  } else {
+    const { error } = await db.from("fxl_matches").delete()
+      .eq("stage_id", stageId).eq("fxl_code", fxlKey);
+    if (error) console.error("clear match", error);
+  }
+}
+
+async function clearAllMatches() {
+  if (!stageId) return;
+  const { error } = await db.from("fxl_matches").delete().eq("stage_id", stageId);
+  if (error) console.error("clear all", error);
+}
+
+/* ---- file handling ---- */
+const drop = document.getElementById("drop");
+const fileInput = document.getElementById("file");
+const statusEl = document.getElementById("status");
+
+drop.addEventListener("click", () => fileInput.click());
+drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("dragover"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("dragover"));
+drop.addEventListener("drop", e => {
+  e.preventDefault(); drop.classList.remove("dragover");
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener("change", () => {
+  if (fileInput.files.length) handleFile(fileInput.files[0]);
+});
+
+function handleFile(file) {
+  setStatus("Reading " + file.name + "…");
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      parseFxl(reader.result, file.name);
+      saveFxlToStage(file.name, reader.result);
+    }
+    catch (err) { setStatus("Could not parse file: " + err.message, "err"); }
+  };
+  reader.onerror = () => setStatus("Failed to read file.", "err");
+  reader.readAsText(file);
+}
+
+/* Store the uploaded FXL in Supabase so the stage's Download button serves it.
+   Only one FXL per stage, so we delete any existing file rows first. */
+async function saveFxlToStage(filename, content) {
+  if (!stageId) return;
+  await db.from("stage_files").delete().eq("stage_id", stageId);
+  const { error } = await db.from("stage_files").insert({
+    stage_id: stageId, name: filename, content: content, mime: "application/xml",
+  });
+  if (error) console.error("save fxl to stage", error);
+}
+
+/* ---- FXL parsing ----
+   FXL files are XML. Trimble libraries expose feature definitions as
+   <PointFeatureDefinition>, <LineFeatureDefinition>, <AreaFeatureDefinition>
+   with a Name attribute and often a Code/Description. We collect all of them. */
+function parseFxl(text, filename) {
+  const doc = new DOMParser().parseFromString(text, "application/xml");
+  if (doc.querySelector("parsererror"))
+    throw new Error("not valid XML");
+
+  const defs = [
+    ...doc.querySelectorAll(
+      "PointFeatureDefinition, LineFeatureDefinition, AreaFeatureDefinition, FeatureDefinition"
+    )
+  ];
+
+  const seen = new Set();
+  features = [];
+  defs.forEach((el, i) => {
+    const code = attr(el, ["Code", "FeatureCode", "Name"]) || ("FEATURE_" + (i + 1));
+    const desc = attr(el, ["Description", "Desc", "DisplayName", "Name"]) || "";
+    let type = el.nodeName.replace("FeatureDefinition", "");
+    if (!type || type === "Feature") type = "Point";
+    const key = code + "|" + type;
+    if (seen.has(key)) return;
+    seen.add(key);
+    features.push({ id: key, code, desc, type });
+  });
+
+  if (!features.length)
+    throw new Error("no feature definitions found in file");
+
+  setStatus("Loaded " + features.length + " feature(s) from " + filename + ".", "ok");
+  renderTable();
+}
+
+function attr(el, names) {
+  for (const n of names) {
+    if (el.hasAttribute && el.hasAttribute(n) && el.getAttribute(n).trim())
+      return el.getAttribute(n).trim();
+    const child = el.querySelector && el.querySelector(n);
+    if (child && child.textContent.trim()) return child.textContent.trim();
+  }
+  return "";
+}
+
+function setStatus(msg, cls) {
+  statusEl.textContent = msg;
+  statusEl.className = "status" + (cls ? " " + cls : "");
+}
+
+/* ---- match table ---- */
+const rowsEl = document.getElementById("rows");
+const matcherEl = document.getElementById("matcher");
+const toolsEl = document.getElementById("tools");
+
+function renderTable() {
+  rowsEl.innerHTML = "";
+  features.forEach(f => {
+    const tr = document.createElement("tr");
+
+    const tdState = document.createElement("td");
+    tdState.className = "state";
+
+    const tdFeat = document.createElement("td");
+    tdFeat.innerHTML =
+      '<div class="fcode">' + esc(f.code) + '</div>' +
+      (f.desc && f.desc !== f.code ? '<div class="fdesc">' + esc(f.desc) + '</div>' : '');
+
+    const tdType = document.createElement("td");
+    tdType.innerHTML = '<span class="ftype">' + esc(f.type) + '</span>';
+
+    const tdMatch = document.createElement("td");
+    const sel = document.createElement("select");
+    sel.className = "match";
+    const blank = document.createElement("option");
+    blank.value = ""; blank.textContent = "— select standard feature —";
+    sel.appendChild(blank);
+    STANDARD_FEATURES.forEach(sf => {
+      const o = document.createElement("option");
+      o.value = sf.code;
+      o.textContent = sf.name + " (" + sf.code + ")";
+      sel.appendChild(o);
+    });
+    sel.value = matches[f.id] || "";
+    applySelState(sel, tdState);
+    sel.addEventListener("change", () => {
+      if (sel.value) matches[f.id] = sel.value;
+      else delete matches[f.id];
+      saveMatch(f.id, sel.value || null);
+      applySelState(sel, tdState);
+      updatePills();
+    });
+    tdMatch.appendChild(sel);
+
+    tr.append(tdState, tdFeat, tdType, tdMatch);
+    rowsEl.appendChild(tr);
+  });
+
+  matcherEl.classList.add("show");
+  toolsEl.classList.add("show");
+  updatePills();
+}
+
+function applySelState(sel, tdState) {
+  if (sel.value) {
+    sel.classList.add("set"); sel.classList.remove("unset");
+    tdState.textContent = "✓"; tdState.style.color = "var(--green)";
+  } else {
+    sel.classList.add("unset"); sel.classList.remove("set");
+    tdState.textContent = "•"; tdState.style.color = "var(--ghost)";
+  }
+}
+
+function updatePills() {
+  const total = features.length;
+  const matched = features.filter(f => matches[f.id]).length;
+  const unmatched = total - matched;
+  document.getElementById("pillTotal").textContent = total + (total === 1 ? " feature" : " features");
+  const uPill = document.getElementById("pillUnmatched");
+  const mPill = document.getElementById("pillMatched");
+  uPill.textContent = unmatched + " unmatched";
+  uPill.style.display = unmatched ? "" : "none";
+  mPill.textContent = matched + " matched";
+  mPill.style.display = matched ? "" : "none";
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+/* ---- tools ---- */
+document.getElementById("autoBtn").addEventListener("click", () => {
+  let hits = 0;
+  features.forEach(f => {
+    if (matches[f.id]) return;
+    const hay = (f.code + " " + f.desc).toLowerCase();
+    const found = STANDARD_FEATURES.find(sf => {
+      const words = sf.name.toLowerCase().split(/[\s/]+/).filter(w => w.length > 2);
+      return words.some(w => hay.includes(w)) || hay.includes(sf.code.toLowerCase());
+    });
+    if (found) { matches[f.id] = found.code; saveMatch(f.id, found.code); hits++; }
+  });
+  renderTable();
+  setStatus("Auto-matched " + hits + " feature(s) by name. Review before exporting.", hits ? "ok" : "");
+});
+
+document.getElementById("clearBtn").addEventListener("click", () => {
+  if (!Object.keys(matches).length) return;
+  if (!confirm("Clear all matches for this file?")) return;
+  matches = {}; clearAllMatches(); renderTable();
+});
+
+document.getElementById("exportBtn").addEventListener("click", () => {
+  const rows = [["FXL_Code", "FXL_Description", "FXL_Type", "Standard_Code", "Standard_Name"]];
+  features.forEach(f => {
+    const stdCode = matches[f.id] || "";
+    const std = STANDARD_FEATURES.find(sf => sf.code === stdCode);
+    rows.push([f.code, f.desc, f.type, stdCode, std ? std.name : ""]);
+  });
+  const csv = rows.map(r => r.map(csvCell).join(",")).join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "fxl-mapping" + (projName ? "-" + projName.replace(/\s+/g, "_") : "") + ".csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+function csvCell(v) {
+  v = String(v == null ? "" : v);
+  return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+}
+
+// Load any previously saved matches for this stage so they appear
+// once the same FXL is re-parsed.
+(async () => { matches = await loadMatches(); })();
+
+</script>
+</body>
+</html>
